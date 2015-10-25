@@ -1,0 +1,334 @@
+#!/bin/bash
+function checkUser {
+  #1 user
+  if [[ ! -d /home/$1 ]]; then
+    echo "no such user" >&2
+    exit 1
+  fi
+}
+function checkQuestion {
+  path="/home/$1/.question/questions/$2"
+  if [[ ! -f "$path" ]]; then
+    echo "no such question $path"  >&2
+  fi
+}
+function checkAnswer {
+  if [[ ! -f /home//$1/.question/answers/$2/$3/$4 ]]; then
+    echo "no such answer", /home//$1/.question/answers/$2/$3/$4 >&2
+  fi
+}
+if [[ $# -eq 0 ]]; then
+  echo "no option is given!!" >&2
+  exit 1
+fi
+
+#check dir
+if [[ ! -d /home/ycy247/.question ]]; then
+  mkdir /home/ycy247/.question
+fi
+if [[ ! -d /home/ycy247/.question/questions ]]; then
+  mkdir /home/ycy247/.question/questions
+fi
+if [[ ! -d /home/ycy247/.question/answers ]]; then
+  mkdir /home/ycy247/.question/answers
+fi
+if [[ ! -d /home/ycy247/.question/votes ]]; then
+  mkdir /home/ycy247/.question/votes
+fi
+
+#start 
+if [[ $1 == create ]]; then
+  #start parsing create
+  #check number of arguments
+  if [[ $# -ge 2 ]] && [[ $# -le 3 ]]; then
+    #check name
+    name=$2
+    if [[ $name == *\/* ]]; then
+      echo "No foward slashes is allowed in a name" >&2 
+      exit 1
+    fi
+    #read content
+    if [[ $# -eq 2 ]]; then
+      read question
+    else
+      question=$3
+    fi
+    #check question
+    if [[ $question == "" ]]; then
+      echo "question can't be empty" >&2
+      exit 1
+    elif [[ $question == *====* ]]; then
+      echo "question can't contain ====" >&2
+      exit 1
+    fi
+    #check if exists
+    filename=/home/ycy247/.question/questions/$name
+    if [[ -f $filename ]]; then
+      echo "this question already exists" >&2
+      exit 1
+    else
+      echo "$question" > "$filename"
+      exit 0
+    fi
+  else
+    echo "The wrong number of arguments are givin to an option(too few too many)" >&2
+    exit 1
+  fi
+elif [[ $1 == answer ]]; then  #start parsing answer 
+  #check number of arguments
+  if [[ $# -ge 3 ]] && [[ $# -le 4 ]]; then
+    qid=$2
+    name=$3
+    #check questionid
+    if [[ ! $qid == *\/* ]]; then
+      echo "invalid arguments" >&2
+    fi
+    qlogin=$(echo $qid | cut -d/ -f1)
+    qname=$(echo $qid | cut -d/ -f2)
+    #check name
+    if [[ $name == *\/* ]]; then
+      echo "No foward slashes is allowed in a name" >&2 
+      exit 1
+    fi
+    if [[ $qname == *\/* ]]; then
+      echo "No foward slashes is allowed in a question name" >&2 
+      exit 1
+    fi
+    #read content
+    if [[ $# -eq 3 ]]; then
+      read question
+    else
+      question=$4
+    fi
+    #check question
+    if [[ $question == "" ]]; then
+      echo "question can't be empty" >&2
+      exit 1
+    elif [[ $question == *====* ]]; then
+      echo "question can't contain ====" >&2
+      exit 1
+    fi
+    #check if equestion exists
+    qfilename="/home/$qlogin/.question/questions/$qname"
+    if [[ ! -f "$qfilename" ]]; then
+      echo "no such question:", "$qfilename" >&2
+      exit 1
+    fi
+    #check if if user exists
+    filedir="/home/ycy247/.question/answers/$qlogin"
+    if [[ ! -d "$filedir" ]]; then
+      mkdir "$filedir"
+    fi
+    #check if if question for user exists
+    filedir="/home/ycy247/.question/answers/$qid"
+    if [[ ! -d "$filedir" ]]; then
+      mkdir "$filedir"
+    fi
+    #check if answer exists
+    if [[ -f "$filedir/$name" ]]; then
+      echo "this answer already exists" >&2
+      exit 1
+    else
+      echo "$question" > "$filedir/$name"
+    fi
+  else
+    echo "The wrong number of arguments are givin to an option(too few too many)" >&2
+    exit 1
+  fi
+elif [[ $1 == list ]]; then
+  #start
+  if [[ $# -eq 1 ]]; then
+    userlist=/home/unixtool/data/question/users
+    #userlist=/home/ycy247/list
+    olduser=""
+    while read user;
+    do
+      if [ "$olduser" = "" ] || [  "$user" != "$olduser" ]; then
+        path=$(find "/home/$user/.question/questions" -type f)
+        #echo $path
+        #echo "-----"
+        count=$(ls /home/$user/.question/questions | wc -l)
+        #echo "????"
+        #echo $count
+        #echo $path
+        #if not empty
+        IFS='
+'
+        if [[ $count -ne 0 ]]; then
+          #echo "here"
+          for files in $path
+          do
+            #echo "some"
+            #echo ":" $files
+            echo $user/$(echo $files | cut -d/ -f6)
+          done
+        fi
+      fi
+      olduser=$user
+    done < $userlist
+  elif [[ $# -eq 2 ]]; then
+    user=$2
+    path=/home/$user/.question/questions/*
+    for files in $path
+    do
+      echo $user/$(echo $files | cut -d/ -f8)
+    done
+  else
+    echo "The wrong number of arguments are givin to an option(too few too many)" >&2
+    exit 1
+  fi
+elif [[ $1 == vote ]]; then
+  #start
+  if [[ $# -eq 3 ]] || [[ $# -eq 4 ]]; then
+    vote=$2
+    if [ "$vote" != "up" ] && [  "$vote" != "down" ]; then
+      echo "invalid arguments" >&2
+      exit 1
+    fi
+    uq=$3
+    u=$(echo $uq | cut -d/ -f1)
+    q=$(echo $uq | cut -d/ -f2)
+    #check name
+    if [[ "$q" == *\/* ]]; then
+      echo "No foward slashes is allowed in a question name" >&2 
+      exit 1
+    fi
+    #check login
+    checkUser $u
+    checkQuestion $u "$q"
+    if [[ $# -eq 4 ]]; then
+      #check answer
+      vua=$4
+      vu=$(echo $vua | cut -d/ -f1)
+      va=$(echo $vua | cut -d/ -f2)
+      checkUser "ycy247"
+      checkAnswer "$vu" "$u" "$q" "$va"
+      vote="$vote $vua"
+    fi
+    #check files
+    vpath="/home/ycy247/.question/votes/$u"
+    if [[ ! -d "$vpath" ]]; then
+      mkdir "$vpath"
+    fi
+    if [[ ! -f "$vpath/$q" ]]; then
+      touch "$vpath/$q"
+    fi
+    exist=0
+    while read r;
+    do
+      if [[ $r == 'up' ]] || [[ $r == 'down' ]]; then
+        if [[ $vote == 'up' ]] || [[ $vote == 'down' ]]; then
+          echo "you've voted"
+          exit 1
+        fi
+      fi
+      id1=$(echo "$vote" | sed 's/^\(up \|down \)//' )
+      id2=$(echo "$r" | sed 's/^\(up \|down \)//' )
+      if [[  $id1 == $id2  ]]; then
+        echo "you've voted"
+        exit 1
+      fi
+    done < $vpath/"$q"
+    echo "Thank you for voting"
+    echo "$vote" >> "$vpath/$q"
+  else
+    echo "The wrong number of arguments are givin to an option(too few too many)" >&2
+    exit 1
+  fi
+elif [[ $1 == view ]]; then
+  if [[ $# -eq 1 ]]; then
+    echo "too few arguments" >&2
+    exit 1
+  fi
+  i=2
+  while [[ $i -le $# ]];
+  do
+    qid=${!i}   
+    qlogin=$(echo $qid | cut -d/ -f1)
+    qname=$(echo $qid | cut -d/ -f2)
+    
+    echo $qname
+    #echo $qlogin
+    #echo $qname
+    checkUser $qlogin
+    checkQuestion $qlogin "$qname"
+    echo "$(cat "/home/$qlogin/.question/questions/$qname")"
+    userlist=/home/unixtool/data/question/users
+    #userlist=/home/ycy247/list
+    total=0
+    ###### start test #######
+    declare -A pollA
+    declare -A answerContent
+    files=$(find /home/*/.question/votes/"$qid")
+    IFS='
+'
+    for file in $files
+    do
+      #echo $file
+      while read vote;
+      do
+        if [ "$vote" = "up" ] || [ "$vote" = "down" ]; then
+          [[ -z "$pollQ" ]]
+          if [ $? -nq 1 ]; then
+            pollQ=0
+          fi
+          if [ "$vote" = "up" ]; then
+            pollQ=$(( $pollQ + 1 ))
+          else
+            pollQ=$(( $pollQ - 1 ))
+          fi
+        else
+          va=$(echo $vote | cut -d/ -f1)
+          answerName=$(echo $vote | cut -d/ -f2)
+          score=$(echo $va | cut -d' ' -f1)
+          answerer=$(echo $va | cut -d' ' -f2)
+          answer="$answerer/$answerName"
+          #echo "vote=" $vote "<br>"
+          #echo "score= " $score
+          #echo "answer=" $answer "<br>"
+          [[ -z "$pollA["$answer"]" ]]
+          if [ $? -ne 1 ]; then
+            pollA["$answer"]=0
+          fi
+          if [ "$score" = "up" ]; then
+              pollA["$answer"]=$(( pollA["$answer"] + 1 ))
+            else
+              pollA["$answer"]=$(( pollA["$answer"] - 1 ))
+          fi
+          #echo "answerer= " $answerer
+          #echo "answer name = " $answername
+          #echo ${poll[$answer]} $answer
+        fi
+      done < "$file"
+    done
+    #add answers with zero votes
+    files=$(find /home/*/.question/answers/"$qid"/*)
+    IFS='
+'
+    for answer in $files
+    do
+      answerName="$(echo "$answer" | cut -d/ -f3)/$(echo "$answer" | cut -d/ -f8)"
+      [[ -z "${pollA["$answerName"]}" ]]
+      if [ $? -eq 0 ]; then
+        pollA["$answerName"]=0
+      fi
+      answerContent[$answerName]=$(cat $answer)
+    done
+    [[ -z "$pollQ" ]]
+    if [ $? -eq 0 ]; then
+      pollQ=0
+    fi
+    echo $pollQ
+    for j in "${!pollA[@]}"
+    do
+      echo "===="
+      echo "${pollA[$j]} $j"
+      echo "${answerContent[$j]}"
+    done
+    ######  end  test #######
+    i=$(($i+1)) 
+  done
+else
+  echo "No such option exists"
+fi
+exit 0
